@@ -1,74 +1,79 @@
 "use client";
 
-import Link from "next/link";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { useState, useEffect } from "react";
-import { FormEvent } from "react";
 import { Input } from "@/components/ui/input";
+import Link from "next/link";
 
 export default function VerifyEmailPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
-  const [verificationCode, setVerificationCode] = useState("");
+  const [code, setCode] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
-  useEffect(() => {
-    const storedEmail = localStorage.getItem("pendingEmail");
-    if (storedEmail) {
-      setEmail(storedEmail);
-    } else {
-      router.push("/auth/signup");
-    }
-  }, [router]);
+  const getDeviceInfo = () => {
+    const userAgent = navigator.userAgent;
+    let browser = "Unknown";
+    let os = navigator.platform || "Unknown";
+    let deviceType = "desktop";
 
-  const getDeviceInfo = async () => {
-    const browserInfo = navigator.userAgent;
-    let location = { country: "Unknown" };
+    if (userAgent.includes("Chrome")) browser = "Chrome";
+    else if (userAgent.includes("Firefox")) browser = "Firefox";
+    else if (userAgent.includes("Safari")) browser = "Safari";
+    else if (userAgent.includes("Edge")) browser = "Edge";
 
-    // Fetch geolocation (only country)
-    try {
-      const response = await fetch("https://ipapi.co/json/");
-      const data = await response.json();
-      location = { country: data.country_name || "Unknown" };
-    } catch (err) {
-      console.error("Failed to fetch location:", err);
-    }
+    if (/iPad|Tablet|Android/i.test(userAgent)) deviceType = "tablet";
+    else if (/Mobile/i.test(userAgent)) deviceType = "mobile";
 
-    // Generate a simple device name based on browser
-    const deviceName = browserInfo.split('(')[1]?.split(')')[0] || "Unknown Device";
+    if (os.includes("Win")) os = "Windows";
+    else if (os.includes("Mac")) os = "MacOS";
+    else if (os.includes("Linux")) os = "Linux";
 
     return {
-      deviceName,
-      browser: browserInfo,
-      os: navigator.platform,
-      deviceType: /Mobi|Android|iPhone|iPad/.test(browserInfo) ? 'mobile' : 'desktop',
-      location,
-      lastLogin: new Date(),
+      deviceName: `Device-${browser}-${os}`,
+      browser: userAgent,
+      os: os,
+      deviceType: deviceType,
+      location: {
+        country: "India",
+      },
+      lastLogin: new Date().toISOString(),
     };
   };
 
-  const handleVerify = async (e: FormEvent<HTMLFormElement>) => {
+  useEffect(() => {
+    const pendingEmail = localStorage.getItem("pendingEmail");
+    if (pendingEmail) {
+      setEmail(pendingEmail);
+    } else {
+      router.push("/auth/register");
+    }
+  }, [router]);
+
+  const handleVerify = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setIsLoading(true);
     setError("");
     setSuccess("");
 
     try {
-      const deviceInfo = await getDeviceInfo();
+      const deviceInfo = getDeviceInfo();
+      console.log('Verify - Sending deviceInfo:', deviceInfo);
+
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/auth/verify-email`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
+        credentials: "include",
         body: JSON.stringify({
           email,
-          code: verificationCode,
+          code,
           deviceInfo,
         }),
-        credentials: "include",
       });
 
       const data = await response.json();
@@ -76,20 +81,19 @@ export default function VerifyEmailPage() {
       if (response.ok) {
         setSuccess(data.message);
         localStorage.removeItem("pendingEmail");
-        setTimeout(() => {
-          router.push("/home");
-        }, 1500);
+        setTimeout(() => router.push("/home"), 2000);
       } else {
-        setError(data.message);
+        setError(data.message || "Failed to verify email. Please try again.");
       }
-    } catch (error) {
-      setError("Network error. Please try again.");
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      setError(`Network error: ${errorMessage}. Please try again.`);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleResendVerification = async () => {
+  const handleResend = async () => {
     setIsLoading(true);
     setError("");
     setSuccess("");
@@ -100,10 +104,8 @@ export default function VerifyEmailPage() {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          email,
-        }),
         credentials: "include",
+        body: JSON.stringify({ email }),
       });
 
       const data = await response.json();
@@ -111,10 +113,11 @@ export default function VerifyEmailPage() {
       if (response.ok) {
         setSuccess("Verification email resent. Please check your inbox.");
       } else {
-        setError(data.message);
+        setError(data.message || "Failed to resend verification email. Please try again.");
       }
-    } catch (error) {
-      setError("Network error. Please try again.");
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      setError(`Network error: ${errorMessage}. Please try again.`);
     } finally {
       setIsLoading(false);
     }
@@ -123,53 +126,49 @@ export default function VerifyEmailPage() {
   return (
     <div className="space-y-6">
       <div className="space-y-2">
-        <h1 className="text-3xl font-bold">Confirm your email</h1>
+        <h1 className="text-3xl font-bold">Verify your email</h1>
         <p className="text-muted-foreground">
-          We've sent a verification code to <span className="font-medium">{email}</span>
+          We sent a verification code to <span className="font-medium">{email}</span>
         </p>
       </div>
 
-      <div className="space-y-4">
-        <p className="text-sm text-muted-foreground">
-          Please check your inbox and enter the verification code below to complete your registration.
-        </p>
+      {error && <p className="text-sm text-red-500">{error}</p>}
+      {success && <p className="text-sm text-green-500">{success}</p>}
 
-        {error && <p className="text-sm text-red-500">{error}</p>}
-        {success && <p className="text-sm text-green-500">{success}</p>}
-
-        <form onSubmit={handleVerify} className="space-y-4">
+      <form onSubmit={handleVerify} className="space-y-4">
+        <div className="space-y-2">
           <Input
             type="text"
             placeholder="Enter verification code"
-            value={verificationCode}
-            onChange={(e) => setVerificationCode(e.target.value)}
+            value={code}
+            onChange={(e) => setCode(e.target.value)}
             required
           />
+        </div>
 
-          <div className="flex flex-col space-y-2">
-            <Button
-              type="submit"
-              className="bg-[#18181B] hover:bg-[#27272A] text-white"
-              disabled={isLoading}
-            >
-              {isLoading ? "Verifying..." : "Verify my email"}
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              className="border-gray-300 dark:border-gray-700"
-              onClick={handleResendVerification}
-              disabled={isLoading}
-            >
-              Resend verification email
-            </Button>
-          </div>
-        </form>
+        <Button
+          type="submit"
+          className="w-full bg-[#18181B] hover:bg-[#27272A] text-white"
+          disabled={isLoading}
+        >
+          {isLoading ? "Verifying..." : "Verify email"}
+        </Button>
+      </form>
+
+      <div className="text-center text-sm">
+        Didn't receive the code?{" "}
+        <button
+          onClick={handleResend}
+          className="font-medium text-primary hover:underline"
+          disabled={isLoading}
+        >
+          Resend code
+        </button>
       </div>
 
       <div className="text-center text-sm">
-        <Link href="/auth/login" className="font-medium text-primary hover:underline">
-          Back to login
+        <Link href="/auth/register" className="font-medium text-primary hover:underline">
+          Back to signup
         </Link>
       </div>
     </div>

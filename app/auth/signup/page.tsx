@@ -1,69 +1,98 @@
-"use client"
+"use client";
 
-import type React from "react"
-import { FormEvent } from "react" // Add this import
-import Link from "next/link"
-import { useRouter } from "next/navigation"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { useState } from "react"
+import type React from "react";
+import { FormEvent } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { useState } from "react";
 
 export default function SignupPage() {
-  const router = useRouter()
-  const [email, setEmail] = useState("")
-  const [firstName, setFirstName] = useState("")
-  const [lastName, setLastName] = useState("")
-  const [password, setPassword] = useState("")
-  const [isLoading, setIsLoading] = useState(false)
-  const [error, setError] = useState("")
+  const router = useRouter();
+  const [email, setEmail] = useState("");
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [password, setPassword] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState("");
 
   const getDeviceInfo = () => {
+    const userAgent = navigator.userAgent;
+    let browser = "Unknown";
+    let os = navigator.platform || "Unknown";
+    let deviceType = "desktop";
+
+    // Basic browser detection
+    if (userAgent.includes("Chrome")) browser = "Chrome";
+    else if (userAgent.includes("Firefox")) browser = "Firefox";
+    else if (userAgent.includes("Safari")) browser = "Safari";
+    else if (userAgent.includes("Edge")) browser = "Edge";
+
+    // Basic device type detection
+    if (/iPad|Tablet|Android/i.test(userAgent)) deviceType = "tablet";
+    else if (/Mobile/i.test(userAgent)) deviceType = "mobile";
+
+    // Normalize OS
+    if (os.includes("Win")) os = "Windows";
+    else if (os.includes("Mac")) os = "MacOS";
+    else if (os.includes("Linux")) os = "Linux";
+
     return {
-      deviceName: navigator.userAgent,
-      lastLogin: new Date()
-    }
-  }
+      deviceName: `Device-${browser}-${os}`,
+      browser: userAgent,
+      os: os,
+      deviceType: deviceType,
+      location: {
+        country: "India", // Match the country sent in the request
+      },
+      lastLogin: new Date().toISOString(),
+    };
+  };
 
   const handleSignup = async (e: FormEvent<HTMLFormElement>) => {
-    e.preventDefault()
-    setIsLoading(true)
-    setError("")
+    e.preventDefault();
+    setIsLoading(true);
+    setError("");
 
     try {
+      const deviceInfo = getDeviceInfo();
+      console.log('Sending deviceInfo:', deviceInfo);
+
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/auth/register`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
+        credentials: "include",
         body: JSON.stringify({
           email,
           firstName,
           lastName,
           password,
-          deviceInfo: getDeviceInfo()
+          deviceInfo,
         }),
-      })
+      });
 
-      const data = await response.json()
+      const data = await response.json();
 
       if (response.ok) {
-        // Store email in localStorage for verification page
-        localStorage.setItem("pendingEmail", email)
-        router.push("/auth/verify-email")
+        localStorage.setItem("pendingEmail", email);
+        router.push("/auth/verify-email");
       } else {
-        setError(data.message)
+        setError(data.message || "Failed to register. Please try again.");
       }
-    } catch (error) {
-      setError("Network error. Please try again.")
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      setError(`Network error: ${errorMessage}. Please try again.`);
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
-  }
+  };
 
   const handleSocialSignup = (provider: string) => {
-    // In a real app, this would redirect to OAuth flow
-    alert(`${provider} signup not implemented in this demo`)
-  }
+    alert(`${provider} signup not implemented in this demo`);
+  };
 
   return (
     <div className="space-y-6">
@@ -81,11 +110,11 @@ export default function SignupPage() {
         >
           <svg viewBox="0 0 24 24" width="24" height="24" className="mr-2">
             <path
-              d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+              d="M22.56 12.25c0-.78-.07-1.53-.20-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
               fill="#4285F4"
             />
             <path
-              d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+              d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.70 23 12 23z"
               fill="#34A853"
             />
             <path
@@ -93,7 +122,7 @@ export default function SignupPage() {
               fill="#FBBC05"
             />
             <path
-              d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
+              d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.70 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.60 3.30-4.53 6.16-4.53z"
               fill="#EA4335"
             />
           </svg>
@@ -109,7 +138,7 @@ export default function SignupPage() {
               fill="#00A4EF"
               d="M11.4 24H0V12.6h11.4V24zM24 24H12.6V12.6H24V24zM11.4 11.4H0V0h11.4v11.4zM24 11.4H12.6V0H24v11.4z"
             />
-            </svg>
+          </svg>
           Sign up with Microsoft
         </button>
 
@@ -191,5 +220,5 @@ export default function SignupPage() {
         </Link>
       </div>
     </div>
-  )
+  );
 }

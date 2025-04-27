@@ -69,9 +69,9 @@ export function Sidebar({ collapsed }: SidebarProps) {
     >
       <div className="p-4 flex items-center gap-2">
         <div className="w-8 h-8 rounded-md bg-gradient-to-br from-teal-400 to-blue-500 flex items-center justify-center">
-          <span className="text-white font-bold">L</span>
+          <span className="text-white font-bold">S</span>
         </div>
-        {!collapsed && <div className="text-white font-medium">Latos</div>}
+        {!collapsed && <div className="text-white font-medium">Stringel</div>}
       </div>
 
       <div className="mt-4 px-2 text-sm text-gray-400 font-medium">{!collapsed && <span>Menu</span>}</div>
