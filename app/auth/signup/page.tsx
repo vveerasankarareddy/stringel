@@ -1,7 +1,7 @@
 "use client"
 
 import type React from "react"
-
+import { FormEvent } from "react" // Add this import
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
@@ -14,11 +14,55 @@ export default function SignupPage() {
   const [firstName, setFirstName] = useState("")
   const [lastName, setLastName] = useState("")
   const [password, setPassword] = useState("")
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState("")
 
-  const handleSignup = (e: React.FormEvent) => {
+  const getDeviceInfo = () => {
+    return {
+      deviceName: navigator.userAgent,
+      lastLogin: new Date()
+    }
+  }
+
+  const handleSignup = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()
-    // In a real app, you would validate and create account here
-    router.push("/auth/verify-email")
+    setIsLoading(true)
+    setError("")
+
+    try {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/auth/register`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          email,
+          firstName,
+          lastName,
+          password,
+          deviceInfo: getDeviceInfo()
+        }),
+      })
+
+      const data = await response.json()
+
+      if (response.ok) {
+        // Store email in localStorage for verification page
+        localStorage.setItem("pendingEmail", email)
+        router.push("/auth/verify-email")
+      } else {
+        setError(data.message)
+      }
+    } catch (error) {
+      setError("Network error. Please try again.")
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleSocialSignup = (provider: string) => {
+    // In a real app, this would redirect to OAuth flow
+    alert(`${provider} signup not implemented in this demo`)
   }
 
   return (
@@ -28,8 +72,13 @@ export default function SignupPage() {
         <p className="text-muted-foreground">Enter your details to get started</p>
       </div>
 
+      {error && <p className="text-sm text-red-500">{error}</p>}
+
       <div className="space-y-4">
-        <button className="w-full flex items-center justify-center gap-2 border border-gray-300 dark:border-gray-700 rounded-md py-2.5 px-4 text-gray-700 dark:text-white hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors bg-white dark:bg-[#18181B]">
+        <button 
+          className="w-full flex items-center justify-center gap-2 border border-gray-300 dark:border-gray-700 rounded-md py-2.5 px-4 text-gray-700 dark:text-white hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors bg-white dark:bg-[#18181B]"
+          onClick={() => handleSocialSignup("Google")}
+        >
           <svg viewBox="0 0 24 24" width="24" height="24" className="mr-2">
             <path
               d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
@@ -51,17 +100,23 @@ export default function SignupPage() {
           Sign up with Google
         </button>
 
-        <button className="w-full flex items-center justify-center gap-2 border border-gray-300 dark:border-gray-700 rounded-md py-2.5 px-4 text-gray-700 dark:text-white hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors bg-white dark:bg-[#18181B]">
+        <button 
+          className="w-full flex items-center justify-center gap-2 border border-gray-300 dark:border-gray-700 rounded-md py-2.5 px-4 text-gray-700 dark:text-white hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors bg-white dark:bg-[#18181B]"
+          onClick={() => handleSocialSignup("Microsoft")}
+        >
           <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" className="mr-2">
             <path
               fill="#00A4EF"
               d="M11.4 24H0V12.6h11.4V24zM24 24H12.6V12.6H24V24zM11.4 11.4H0V0h11.4v11.4zM24 11.4H12.6V0H24v11.4z"
             />
-          </svg>
+            </svg>
           Sign up with Microsoft
         </button>
 
-        <button className="w-full flex items-center justify-center gap-2 border border-gray-300 dark:border-gray-700 rounded-md py-2.5 px-4 text-gray-700 dark:text-white hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors bg-white dark:bg-[#18181B]">
+        <button 
+          className="w-full flex items-center justify-center gap-2 border border-gray-300 dark:border-gray-700 rounded-md py-2.5 px-4 text-gray-700 dark:text-white hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors bg-white dark:bg-[#18181B]"
+          onClick={() => handleSocialSignup("GitHub")}
+        >
           <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" className="mr-2">
             <path
               fill="#24292e"
@@ -119,8 +174,12 @@ export default function SignupPage() {
             />
           </div>
 
-          <Button type="submit" className="w-full bg-[#18181B] hover:bg-[#27272A] text-white">
-            Create account
+          <Button 
+            type="submit" 
+            className="w-full bg-[#18181B] hover:bg-[#27272A] text-white"
+            disabled={isLoading}
+          >
+            {isLoading ? "Creating account..." : "Create account"}
           </Button>
         </form>
       </div>

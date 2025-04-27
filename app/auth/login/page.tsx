@@ -1,25 +1,86 @@
-"use client"
+"use client";
 
-import type React from "react"
-
-import Link from "next/link"
-import { useRouter } from "next/navigation"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Checkbox } from "@/components/ui/checkbox"
-import { useState } from "react"
+import type React from "react";
+import { FormEvent } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
+import { useState } from "react";
 
 export default function LoginPage() {
-  const router = useRouter()
-  const [email, setEmail] = useState("")
-  const [password, setPassword] = useState("")
-  const [rememberMe, setRememberMe] = useState(false)
+  const router = useRouter();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [rememberMe, setRememberMe] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState("");
 
-  const handleLogin = (e: React.FormEvent) => {
-    e.preventDefault()
-    // In a real app, you would validate and authenticate here
-    router.push("/home")
-  }
+  const getDeviceInfo = async () => {
+    const browserInfo = navigator.userAgent;
+    let location = { country: "Unknown" };
+
+    // Fetch geolocation (only country)
+    try {
+      const response = await fetch("https://ipapi.co/json/");
+      const data = await response.json();
+      location = { country: data.country_name || "Unknown" };
+    } catch (err) {
+      console.error("Failed to fetch location:", err);
+    }
+
+    // Generate a simple device name based on browser
+    const deviceName = browserInfo.split('(')[1]?.split(')')[0] || "Unknown Device";
+
+    return {
+      deviceName,
+      browser: browserInfo,
+      os: navigator.platform,
+      deviceType: /Mobi|Android|iPhone|iPad/.test(browserInfo) ? 'mobile' : 'desktop',
+      location,
+      lastLogin: new Date(),
+    };
+  };
+
+  const handleLogin = async (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setIsLoading(true);
+    setError("");
+
+    try {
+      const deviceInfo = await getDeviceInfo();
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/auth/login`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          email,
+          password,
+          deviceInfo,
+          rememberMe,
+        }),
+        credentials: "include",
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        router.push("/home");
+      } else {
+        setError(data.message);
+      }
+    } catch (error) {
+      setError("Network error. Please try again.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleSocialLogin = (provider: string) => {
+    alert(`${provider} login not implemented in this demo`);
+  };
 
   return (
     <div className="space-y-6 max-w-md">
@@ -28,8 +89,13 @@ export default function LoginPage() {
         <p className="text-muted-foreground">Create the ultimate learning experience</p>
       </div>
 
+      {error && <p className="text-sm text-red-500">{error}</p>}
+
       <div className="space-y-4">
-        <button className="w-full flex items-center justify-center gap-2 border border-gray-300 dark:border-gray-700 rounded-md py-2.5 px-4 text-gray-700 dark:text-white hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors bg-white dark:bg-[#18181B]">
+        <button
+          onClick={() => handleSocialLogin("Google")}
+          className="w-full flex items-center justify-center gap-2 border border-gray-300 dark:border-gray-700 rounded-md py-2.5 px-4 text-gray-700 dark:text-white hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors bg-white dark:bg-[#18181B]"
+        >
           <svg viewBox="0 0 24 24" width="24" height="24" className="mr-2">
             <path
               d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
@@ -51,7 +117,10 @@ export default function LoginPage() {
           Log in with Google
         </button>
 
-        <button className="w-full flex items-center justify-center gap-2 border border-gray-300 dark:border-gray-700 rounded-md py-2.5 px-4 text-gray-700 dark:text-white hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors bg-white dark:bg-[#18181B]">
+        <button
+          onClick={() => handleSocialLogin("Microsoft")}
+          className="w-full flex items-center justify-center gap-2 border border-gray-300 dark:border-gray-700 rounded-md py-2.5 px-4 text-gray-700 dark:text-white hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors bg-white dark:bg-[#18181B]"
+        >
           <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" className="mr-2">
             <path
               fill="#00A4EF"
@@ -61,7 +130,10 @@ export default function LoginPage() {
           Log in with Microsoft
         </button>
 
-        <button className="w-full flex items-center justify-center gap-2 border border-gray-300 dark:border-gray-700 rounded-md py-2.5 px-4 text-gray-700 dark:text-white hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors bg-white dark:bg-[#18181B]">
+        <button
+          onClick={() => handleSocialLogin("GitHub")}
+          className="w-full flex items-center justify-center gap-2 border border-gray-300 dark:border-gray-700 rounded-md py-2.5 px-4 text-gray-700 dark:text-white hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors bg-white dark:bg-[#18181B]"
+        >
           <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" className="mr-2">
             <path
               fill="#24292e"
@@ -119,8 +191,12 @@ export default function LoginPage() {
             </Link>
           </div>
 
-          <Button type="submit" className="w-full bg-[#18181B] hover:bg-[#27272A] text-white">
-            Log in
+          <Button
+            type="submit"
+            className="w-full bg-[#18181B] hover:bg-[#27272A] text-white"
+            disabled={isLoading}
+          >
+            {isLoading ? "Logging in..." : "Log in"}
           </Button>
         </form>
       </div>
@@ -132,5 +208,5 @@ export default function LoginPage() {
         </Link>
       </div>
     </div>
-  )
+  );
 }
