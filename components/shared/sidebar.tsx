@@ -16,19 +16,22 @@ import {
   User,
   Settings2,
   Plus,
+  Menu,
 } from "lucide-react"
 
 interface SidebarProps {
   collapsed: boolean
+  onToggle: () => void
 }
 
-export function Sidebar({ collapsed }: SidebarProps) {
+export function Sidebar({ collapsed, onToggle }: SidebarProps) {
   const router = useRouter()
   const pathname = usePathname()
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const [hasChannels, setHasChannels] = useState(false)
   const [hasBots, setHasBots] = useState(false)
   const [userName, setUserName] = useState("User")
+  const [channels, setChannels] = useState<any[]>([])
   const userMenuRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -41,6 +44,26 @@ export function Sidebar({ collapsed }: SidebarProps) {
       localStorage.setItem("userName", "Sankar")
       setUserName("Sankar")
     }
+
+    // Check if we have connected channels
+    const telegramConnected = localStorage.getItem("telegramConnected") === "true"
+
+    if (telegramConnected) {
+      setHasChannels(true)
+      setChannels([
+        {
+          id: "telegram-1",
+          name: "vasudeva",
+          type: "telegram",
+          url: "/dashboard/telegram",
+        },
+      ])
+    } else {
+      setHasChannels(localStorage.getItem("hasChannels") === "true")
+    }
+
+    // Check if we have bots
+    setHasBots(localStorage.getItem("hasBots") === "true")
   }, [])
 
   const isActive = (path: string) => {
@@ -60,6 +83,19 @@ export function Sidebar({ collapsed }: SidebarProps) {
     }
   }, [])
 
+  const getChannelIcon = (type: string) => {
+    switch (type) {
+      case "telegram":
+        return (
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="#0088cc">
+            <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.562 8.248l-1.97 9.269c-.145.658-.537.818-1.084.51l-3-2.21-1.446 1.394c-.16.16-.295.295-.605.295l.213-3.053 5.56-5.023c.242-.213-.054-.333-.373-.121l-6.871 4.326-2.962-.924c-.643-.204-.657-.643.136-.953l11.57-4.461c.538-.196 1.006.128.832.95z" />
+          </svg>
+        )
+      default:
+        return null
+    }
+  }
+
   return (
     <div
       className={cn(
@@ -69,9 +105,16 @@ export function Sidebar({ collapsed }: SidebarProps) {
     >
       <div className="p-4 flex items-center gap-2">
         <div className="w-8 h-8 rounded-md bg-gradient-to-br from-teal-400 to-blue-500 flex items-center justify-center">
-          <span className="text-white font-bold">S</span>
+          <span className="text-white font-bold">L</span>
         </div>
-        {!collapsed && <div className="text-white font-medium">Stringel</div>}
+        {!collapsed && <div className="text-white font-medium">Latos</div>}
+        <button
+          onClick={onToggle}
+          className="ml-auto text-gray-400 hover:text-white p-1 rounded-md hover:bg-[#2a2a2a]"
+          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+        >
+          <Menu className="w-4 h-4" />
+        </button>
       </div>
 
       <div className="mt-4 px-2 text-sm text-gray-400 font-medium">{!collapsed && <span>Menu</span>}</div>
@@ -186,35 +229,33 @@ export function Sidebar({ collapsed }: SidebarProps) {
         </div>
       )}
 
-      {hasChannels ? (
+      {/* Connected Channels */}
+      {channels.length > 0 ? (
         <div className="mt-1 px-2">
           {!collapsed && (
             <div className="space-y-1">
-              <Link
-                href="/channels/instagram"
-                className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-[#2a2a2a] text-white text-sm"
-              >
-                <div className="w-4 h-4 flex items-center justify-center">
-                  <svg viewBox="0 0 24 24" width="16" height="16" fill="#E1306C">
-                    <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zM12 0C8.741 0 8.333.014 7.053.072 2.695.272.273 2.69.073 7.052.014 8.333 0 8.741 0 12c0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98C8.333 23.986 8.741 24 12 24c3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98C15.668.014 15.259 0 12 0zm0 5.838a6.162 6.162 0 100 12.324 6.162 6.162 0 000-12.324zM12 16a4 4 0 110-8 4 4 0 010 8zm6.406-11.845a1.44 1.44 0 100 2.881 1.44 1.44 0 000-2.881z" />
-                  </svg>
-                </div>
-                <span>Instagram</span>
-              </Link>
+              {channels.map((channel) => (
+                <Link
+                  key={channel.id}
+                  href={channel.url}
+                  className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-[#2a2a2a] text-white text-sm"
+                >
+                  <div className="w-4 h-4 flex items-center justify-center">{getChannelIcon(channel.type)}</div>
+                  <span>{channel.name}</span>
+                </Link>
+              ))}
             </div>
           )}
           {collapsed && (
             <div className="flex justify-center mt-2">
-              <Link href="/channels/instagram" className="p-1 rounded-md hover:bg-[#2a2a2a] group relative">
-                <div className="w-4 h-4 flex items-center justify-center">
-                  <svg viewBox="0 0 24 24" width="16" height="16" fill="#E1306C">
-                    <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zM12 0C8.741 0 8.333.014 7.053.072 2.695.272.273 2.69.073 7.052.014 8.333 0 8.741 0 12c0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98C8.333 23.986 8.741 24 12 24c3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98C15.668.014 15.259 0 12 0zm0 5.838a6.162 6.162 0 100 12.324 6.162 6.162 0 000-12.324zM12 16a4 4 0 110-8 4 4 0 010 8zm6.406-11.845a1.44 1.44 0 100 2.881 1.44 1.44 0 000-2.881z" />
-                  </svg>
-                </div>
-                <div className="absolute left-full ml-2 rounded bg-[#1e1e1e] px-2 py-1 text-xs whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity z-50 pointer-events-none">
-                  Instagram
-                </div>
-              </Link>
+              {channels.map((channel) => (
+                <Link key={channel.id} href={channel.url} className="p-1 rounded-md hover:bg-[#2a2a2a] group relative">
+                  <div className="w-4 h-4 flex items-center justify-center">{getChannelIcon(channel.type)}</div>
+                  <div className="absolute left-full ml-2 rounded bg-[#1e1e1e] px-2 py-1 text-xs whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity z-50 pointer-events-none">
+                    {channel.name}
+                  </div>
+                </Link>
+              ))}
             </div>
           )}
         </div>

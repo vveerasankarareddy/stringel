@@ -4,46 +4,56 @@ import { useRouter } from "next/navigation"
 import { MainLayout } from "@/components/layouts/main-layout"
 import { Button } from "@/components/ui/button"
 import { ArrowLeft } from "lucide-react"
+import { useIsMobile } from "@/hooks/use-mobile"
 
 export default function TelegramConnectPage() {
   const router = useRouter()
+  const isMobile = useIsMobile()
 
   return (
-    <MainLayout hideSidebar={true}>
+    <MainLayout hideSidebar={!isMobile}>
       <div className="flex flex-col h-full">
-        <div className="p-6 border-b border-[#2a2a2a]">
+        <div className="p-4 border-b border-[#2a2a2a] flex items-center">
           <Button
             variant="link"
-            className="mb-4 pl-0 text-gray-400 hover:text-white hover:bg-transparent hover:glow"
+            className="pl-0 text-gray-400 hover:text-white hover:bg-transparent hover:glow"
             onClick={() => router.push("/channels/connect")}
           >
             <ArrowLeft className="mr-2 h-4 w-4" />
             Back
           </Button>
+          <h1 className="text-lg font-medium text-white ml-2">Connect Telegram</h1>
         </div>
 
-        <div className="flex-1 flex">
-          <div className="w-1/2 p-12 flex flex-col justify-center">
-            <div className="mb-8">
-              <div className="w-16 h-16 mb-6">
+        <div className="flex-1 flex flex-col md:flex-row p-4">
+          <div className="w-full md:w-1/2 p-4 md:p-8 flex flex-col justify-center">
+            <div className="mb-6">
+              <div className="w-16 h-16 mb-4 mx-auto md:mx-0">
                 <svg viewBox="0 0 24 24" fill="#0088cc" className="w-full h-full">
                   <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.562 8.248l-1.97 9.269c-.145.658-.537.818-1.084.51l-3-2.21-1.446 1.394c-.16.16-.295.295-.605.295l.213-3.053 5.56-5.023c.242-.213-.054-.333-.373-.121l-6.871 4.326-2.962-.924c-.643-.204-.657-.643.136-.953l11.57-4.461c.538-.196 1.006.128.832.95z" />
                 </svg>
               </div>
-              <h1 className="text-4xl font-bold text-white mb-4">Let's connect Telegram bot to Latos</h1>
-              <p className="text-gray-400 mb-6">You can create a new bot or connect existing one.</p>
+              <h1 className="text-2xl md:text-4xl font-bold text-white mb-2 text-center md:text-left">
+                Let's connect Telegram bot to Latos
+              </h1>
+              <p className="text-gray-400 mb-4 text-center md:text-left">
+                You can create a new bot or connect existing one.
+              </p>
             </div>
           </div>
 
-          <div className="w-1/2 p-12 flex flex-col justify-center">
-            <div className="bg-[#1e1e1e] p-8 rounded-lg border border-[#2a2a2a]">
+          <div className="w-full md:w-1/2 p-4 md:p-8 flex flex-col justify-center">
+            <div className="bg-[#1e1e1e] p-6 rounded-lg border border-[#2a2a2a]">
               <h2 className="text-xl font-semibold text-white mb-4">How do you want to start?</h2>
               <p className="text-gray-400 mb-6">
                 In each scenario, we will guide you through easy step-by-step instructions.
               </p>
 
-              <div className="flex gap-4 mb-6">
-                <Button className="flex-1 bg-blue-600 hover:bg-blue-700 text-white">
+              <div className="flex flex-col md:flex-row gap-4 mb-6">
+                <Button
+                  className="flex-1 bg-blue-600 hover:bg-blue-700 text-white"
+                  onClick={() => router.push("/telegram/create-bot")}
+                >
                   <svg
                     className="w-4 h-4 mr-2"
                     viewBox="0 0 24 24"
@@ -61,6 +71,7 @@ export default function TelegramConnectPage() {
                 <Button
                   variant="outline"
                   className="flex-1 border-[#2a2a2a] text-white hover:text-white hover:bg-[#2a2a2a]"
+                  onClick={() => router.push("/telegram/connect-existing")}
                 >
                   <svg
                     className="w-4 h-4 mr-2"
