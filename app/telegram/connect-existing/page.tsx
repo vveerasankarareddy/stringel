@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { MainLayout } from "@/components/layouts/main-layout"
 import { useIsMobile } from "@/hooks/use-mobile"
+import axios, { AxiosError } from 'axios';
 
 export default function ConnectExistingTelegramBotPage() {
   const router = useRouter()
@@ -15,6 +16,7 @@ export default function ConnectExistingTelegramBotPage() {
   const [botToken, setBotToken] = useState("")
   const [copied, setCopied] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   const handleCopyCommand = () => {
     navigator.clipboard.writeText("/mybots")
@@ -22,19 +24,42 @@ export default function ConnectExistingTelegramBotPage() {
     setTimeout(() => setCopied(false), 2000)
   }
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsLoading(true)
+    setError(null)
 
-    // Simulate API call
-    setTimeout(() => {
-      // Save to localStorage that we have connected a Telegram bot
-      localStorage.setItem("telegramConnected", "true")
-      localStorage.setItem("hasChannels", "true")
+    try {
+      const response = await axios.post(
+        `${process.env.NEXT_PUBLIC_API_URL}/api/telegram/update-bot-token`,
+        {
+          botToken,
+          // Removed hardcoded webhookUrl since it's optional on the server
+        },
+        {
+          withCredentials: true // Automatically sends the sessionToken cookie
+        }
+      );
 
-      setIsLoading(false)
-      router.push("/telegram/success?name=vasudeva")
-    }, 1500)
+      if (response.status === 200 && response.data.success) {
+        localStorage.setItem("telegramConnected", "true");
+        localStorage.setItem("hasChannels", "true");
+        router.push(`/telegram/success?name=${encodeURIComponent(response.data.botName || 'vasudeva')}`);
+      }
+    } catch (error) {
+      const axiosError = error as AxiosError;
+      console.error('Error connecting bot:', axiosError.response?.data || axiosError.message, axiosError.stack);
+      if (axiosError.response?.status === 401) {
+        router.push('/login'); // Redirect to login if session is invalid
+      } else if (axiosError.response?.status === 400) {
+        const errorMessage = (axiosError.response?.data as { message?: string })?.message || 'Invalid Telegram bot token. Please check and try again.';
+        setError(errorMessage);
+      } else {
+        setError('Failed to connect bot. Please try again.');
+      }
+    } finally {
+      setIsLoading(false);
+    }
   }
 
   return (
@@ -142,6 +167,7 @@ export default function ConnectExistingTelegramBotPage() {
                         className="bg-[#121212] border-[#2a2a2a]"
                         required
                       />
+                      {error && <p className="text-red-500 text-sm">{error}</p>}
                       <Button
                         type="submit"
                         className="w-full bg-blue-600 hover:bg-blue-700"

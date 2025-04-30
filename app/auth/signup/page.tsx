@@ -1,7 +1,6 @@
 "use client";
 
-import type React from "react";
-import { FormEvent } from "react";
+import React, { FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -18,35 +17,17 @@ export default function SignupPage() {
   const [error, setError] = useState("");
 
   const getDeviceInfo = () => {
-    const userAgent = navigator.userAgent;
-    let browser = "Unknown";
-    let os = navigator.platform || "Unknown";
-    let deviceType = "desktop";
-
-    // Basic browser detection
-    if (userAgent.includes("Chrome")) browser = "Chrome";
-    else if (userAgent.includes("Firefox")) browser = "Firefox";
-    else if (userAgent.includes("Safari")) browser = "Safari";
-    else if (userAgent.includes("Edge")) browser = "Edge";
-
-    // Basic device type detection
-    if (/iPad|Tablet|Android/i.test(userAgent)) deviceType = "tablet";
-    else if (/Mobile/i.test(userAgent)) deviceType = "mobile";
-
-    // Normalize OS
-    if (os.includes("Win")) os = "Windows";
-    else if (os.includes("Mac")) os = "MacOS";
-    else if (os.includes("Linux")) os = "Linux";
-
+    const userAgent = navigator.userAgent || "Unknown";
+    // Generate a simple device name; server can override with parsed data if needed
+    const deviceName = `Device-${Math.random().toString(36).substring(2, 8)}`; // Unique identifier
+    
     return {
-      deviceName: `Device-${browser}-${os}`,
-      browser: userAgent,
-      os: os,
-      deviceType: deviceType,
+      deviceName,              // Custom device identifier
+      browser: userAgent,      // Full user agent string for server parsing
       location: {
-        country: "India", // Match the country sent in the request
+        country: "Unknown",    // Avoid hardcoding; server defaults to "Unknown" if not provided
       },
-      lastLogin: new Date().toISOString(),
+      lastLogin: new Date().toISOString(), // Current time in ISO format
     };
   };
 
@@ -57,7 +38,7 @@ export default function SignupPage() {
 
     try {
       const deviceInfo = getDeviceInfo();
-      console.log('Sending deviceInfo:', deviceInfo);
+      console.log("Sending deviceInfo:", deviceInfo);
 
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/auth/register`, {
         method: "POST",
@@ -104,7 +85,7 @@ export default function SignupPage() {
       {error && <p className="text-sm text-red-500">{error}</p>}
 
       <div className="space-y-4">
-        <button 
+        <button
           className="w-full flex items-center justify-center gap-2 border border-gray-300 dark:border-gray-700 rounded-md py-2.5 px-4 text-gray-700 dark:text-white hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors bg-white dark:bg-[#18181B]"
           onClick={() => handleSocialSignup("Google")}
         >
@@ -129,7 +110,7 @@ export default function SignupPage() {
           Sign up with Google
         </button>
 
-        <button 
+        <button
           className="w-full flex items-center justify-center gap-2 border border-gray-300 dark:border-gray-700 rounded-md py-2.5 px-4 text-gray-700 dark:text-white hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors bg-white dark:bg-[#18181B]"
           onClick={() => handleSocialSignup("Microsoft")}
         >
@@ -142,7 +123,7 @@ export default function SignupPage() {
           Sign up with Microsoft
         </button>
 
-        <button 
+        <button
           className="w-full flex items-center justify-center gap-2 border border-gray-300 dark:border-gray-700 rounded-md py-2.5 px-4 text-gray-700 dark:text-white hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors bg-white dark:bg-[#18181B]"
           onClick={() => handleSocialSignup("GitHub")}
         >
@@ -203,8 +184,8 @@ export default function SignupPage() {
             />
           </div>
 
-          <Button 
-            type="submit" 
+          <Button
+            type="submit"
             className="w-full bg-[#18181B] hover:bg-[#27272A] text-white"
             disabled={isLoading}
           >
