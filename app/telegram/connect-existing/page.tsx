@@ -1,22 +1,26 @@
 "use client"
 
-import type React from "react"
-import { useState } from "react"
+import React, { useState } from "react"
 import { useRouter } from "next/navigation"
-import { ArrowLeft, Copy, Check } from "lucide-react"
+import { ArrowLeft, Copy, Check, AlertTriangle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { MainLayout } from "@/components/layouts/main-layout"
 import { useIsMobile } from "@/hooks/use-mobile"
-import axios, { AxiosError } from 'axios';
+import axios, { AxiosError } from 'axios'
+import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert"
 
 export default function ConnectExistingTelegramBotPage() {
   const router = useRouter()
   const isMobile = useIsMobile()
   const [botToken, setBotToken] = useState("")
+  const [botName, setBotName] = useState("")
   const [copied, setCopied] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [webhookWarning, setWebhookWarning] = useState(false)
+  const [webhookConflict, setWebhookConflict] = useState(false)
+  const [botId, setBotId] = useState<string | null>(null)
 
   const handleCopyCommand = () => {
     navigator.clipboard.writeText("/mybots")
@@ -24,8 +28,32 @@ export default function ConnectExistingTelegramBotPage() {
     setTimeout(() => setCopied(false), 2000)
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
+  const handleRemoveWebhook = async () => {
+    if (!botId) return
+    
+    setIsLoading(true)
+    try {
+      const response = await axios.post(
+        `${process.env.NEXT_PUBLIC_API_URL}/api/telegram/remove-webhook/${botId}`,
+        {},
+        { withCredentials: true }
+      )
+
+      if (response.data.success) {
+        setWebhookConflict(false)
+        setWebhookWarning(true)
+        await handleSubmitAfterWebhookRemoval()
+      }
+    } catch (error) {
+      const axiosError = error as AxiosError
+      console.error('Error removing webhook:', axiosError.response?.data || axiosError.message)
+      setError('Failed to remove webhook. Please try again.')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleSubmitAfterWebhookRemoval = async () => {
     setIsLoading(true)
     setError(null)
 
@@ -34,31 +62,68 @@ export default function ConnectExistingTelegramBotPage() {
         `${process.env.NEXT_PUBLIC_API_URL}/api/telegram/update-bot-token`,
         {
           botToken,
-          // Removed hardcoded webhookUrl since it's optional on the server
+          botName: botName || undefined,
         },
-        {
-          withCredentials: true // Automatically sends the sessionToken cookie
-        }
-      );
+        { withCredentials: true }
+      )
 
       if (response.status === 200 && response.data.success) {
-        localStorage.setItem("telegramConnected", "true");
-        localStorage.setItem("hasChannels", "true");
-        router.push(`/telegram/success?name=${encodeURIComponent(response.data.botName || 'vasudeva')}`);
+        localStorage.setItem("telegramConnected", "true")
+        localStorage.setItem("hasChannels", "true")
+        
+        router.push(`/telegram/success?name=${encodeURIComponent(response.data.botName || 'Your Bot')}`)
       }
     } catch (error) {
-      const axiosError = error as AxiosError;
-      console.error('Error connecting bot:', axiosError.response?.data || axiosError.message, axiosError.stack);
-      if (axiosError.response?.status === 401) {
-        router.push('/login'); // Redirect to login if session is invalid
-      } else if (axiosError.response?.status === 400) {
-        const errorMessage = (axiosError.response?.data as { message?: string })?.message || 'Invalid Telegram bot token. Please check and try again.';
-        setError(errorMessage);
-      } else {
-        setError('Failed to connect bot. Please try again.');
-      }
+      handleApiError(error as AxiosError)
     } finally {
-      setIsLoading(false);
+      setIsLoading(false)
+    }
+  }
+
+  const handleApiError = (error: AxiosError) => {
+    console.error('API Error:', error.response?.data || error.message)
+    
+    const errorData = error.response?.data as any
+    if (error.response?.status === 409 || 
+        (errorData?.error && errorData?.error.includes("Conflict")) ||
+        (errorData?.message && errorData?.message.includes("webhook"))) {
+      setWebhookConflict(true)
+      setBotId(errorData?.botId || null)
+    } else if (error.response?.status === 401) {
+      router.push('/login')
+    } else if (error.response?.status === 400) {
+      setError((errorData?.message as string) || 'Invalid bot token. Please check and try again.')
+    } else {
+      setError('Failed to connect bot. Please try again.')
+    }
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setIsLoading(true)
+    setError(null)
+    setWebhookWarning(false)
+    setWebhookConflict(false)
+
+    try {
+      const response = await axios.post(
+        `${process.env.NEXT_PUBLIC_API_URL}/api/telegram/update-bot-token`,
+        {
+          botToken,
+          botName: botName || undefined,
+        },
+        { withCredentials: true }
+      )
+
+      if (response.status === 200 && response.data.success) {
+        localStorage.setItem("telegramConnected", "true")
+        localStorage.setItem("hasChannels", "true")
+        router.push(`/telegram/success?name=${encodeURIComponent(response.data.botName || 'Your Bot')}`)
+      }
+    } catch (error) {
+      handleApiError(error as AxiosError)
+    } finally {
+      setIsLoading(false)
     }
   }
 
@@ -83,6 +148,34 @@ export default function ConnectExistingTelegramBotPage() {
               <h2 className="text-2xl font-bold text-white mb-2">Connect your existing Telegram bot</h2>
               <p className="text-gray-400">Follow these simple steps to connect your existing Telegram bot</p>
             </div>
+
+            {webhookWarning && (
+              <Alert className="mb-6 bg-amber-900/30 border-amber-700 text-amber-200">
+                <AlertTriangle className="h-4 w-4" />
+                <AlertTitle>Warning</AlertTitle>
+                <AlertDescription>
+                  We've removed the webhook from your bot to ensure proper connection.
+                  Your bot will now work in long polling mode instead of webhook mode.
+                </AlertDescription>
+              </Alert>
+            )}
+
+            {webhookConflict && (
+              <Alert className="mb-6 bg-orange-900/30 border-orange-700 text-orange-200">
+                <AlertTriangle className="h-4 w-4" />
+                <AlertTitle>Webhook Already Set</AlertTitle>
+                <AlertDescription>
+                  <p className="mb-2">This bot already has a webhook set up, which conflicts with our connection method.</p>
+                  <Button 
+                    onClick={handleRemoveWebhook} 
+                    disabled={isLoading}
+                    className="bg-orange-700 hover:bg-orange-800 text-white mt-2"
+                  >
+                    {isLoading ? "Removing..." : "Remove Webhook and Continue"}
+                  </Button>
+                </AlertDescription>
+              </Alert>
+            )}
 
             <div className="bg-[#1e1e1e] rounded-lg border border-[#2a2a2a] p-6">
               <div className="space-y-6">
@@ -167,7 +260,21 @@ export default function ConnectExistingTelegramBotPage() {
                         className="bg-[#121212] border-[#2a2a2a]"
                         required
                       />
-                      {error && <p className="text-red-500 text-sm">{error}</p>}
+                      
+                      <Input
+                        placeholder="Custom bot name (optional)"
+                        value={botName}
+                        onChange={(e) => setBotName(e.target.value)}
+                        className="bg-[#121212] border-[#2a2a2a]"
+                      />
+                      
+                      {error && (
+                        <Alert variant="destructive" className="bg-red-900/20 border-red-900">
+                          <AlertTriangle className="h-4 w-4" />
+                          <AlertDescription>{error}</AlertDescription>
+                        </Alert>
+                      )}
+                      
                       <Button
                         type="submit"
                         className="w-full bg-blue-600 hover:bg-blue-700"
