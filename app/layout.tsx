@@ -6,8 +6,9 @@ import { ThemeProvider } from "@/components/theme-provider"
 const inter = Inter({ subsets: ["latin"] })
 
 export const metadata = {
-  title: "Stringel Agents",
-  description: "AI Agent Interface with Authentication"
+  title: "AI Agent Interface",
+  description: "AI Agent Interface with Authentication",
+    generator: 'v0.dev'
 }
 
 export default function RootLayout({

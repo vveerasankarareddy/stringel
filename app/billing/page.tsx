@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useState } from "react"
 import { MainLayout } from "@/components/layouts/main-layout"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
@@ -9,12 +9,7 @@ import { Check } from "lucide-react"
 
 export default function BillingPage() {
   const [billingCycle, setBillingCycle] = useState<"monthly" | "yearly">("monthly")
-  const [workspaceName, setWorkspaceName] = useState<string>("")
-
-  useEffect(() => {
-    const name = localStorage.getItem("workspaceName") || "sankar reddy's Workspace"
-    setWorkspaceName(name)
-  }, [])
+  const workspaceName = localStorage.getItem("workspaceName") || "sankar reddy's Workspace"
 
   return (
     <MainLayout>
