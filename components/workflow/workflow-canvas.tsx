@@ -1,12 +1,10 @@
 "use client"
 
 import type React from "react"
-
 import { useState, useRef, useEffect, useCallback } from "react"
 import { WorkflowNode } from "./workflow-node"
 import { WorkflowConnection } from "./workflow-connection"
 import { NodeSidebar } from "./node-sidebar"
-import { AutoLayoutButton } from "./auto-layout-button"
 import { Plus, ZoomIn, ZoomOut, RotateCcw } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useTheme } from "next-themes"
@@ -21,6 +19,7 @@ interface NodeData {
   x: number
   y: number
   width?: number
+  height?: number
   isStartNode?: boolean
   isEndNode?: boolean
 }
@@ -50,6 +49,8 @@ export function WorkflowCanvas({ initialNodes = [], initialEdges = [] }: Workflo
   // UI state
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null)
+  const [highlightedNodeIds, setHighlightedNodeIds] = useState<string[]>([])
+  const [highlightedEdgeIds, setHighlightedEdgeIds] = useState<string[]>([])
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
   // Canvas interaction state
@@ -72,18 +73,6 @@ export function WorkflowCanvas({ initialNodes = [], initialEdges = [] }: Workflo
     sourcePort: "input" | "output"
   } | null>(null)
 
-  // Reconnection state
-  const [isReconnecting, setIsReconnecting] = useState(false)
-  const [reconnectingEdge, setReconnectingEdge] = useState<{
-    id: string
-    sourceId: string
-    targetId: string
-    sourcePort: "input" | "output"
-    targetPort: "input" | "output"
-    startX: number
-    startY: number
-  } | null>(null)
-
   // Context menu state
   const [contextMenu, setContextMenu] = useState<{
     isOpen: boolean
@@ -99,17 +88,13 @@ export function WorkflowCanvas({ initialNodes = [], initialEdges = [] }: Workflo
     type: "canvas",
   })
 
+  // Node dimensions cache
+  const [nodeDimensions, setNodeDimensions] = useState<Record<string, { width: number; height: number }>>({})
+
   // Search state
-  const [searchTerm, setSearchTerm] = useState("")
+  const [searchTerm, setSearchTerm] = useState<string>("")
   const [searchResults, setSearchResults] = useState<string[]>([])
-  const [currentSearchIndex, setCurrentSearchIndex] = useState(0)
-
-  // Source node for new connection
-  const [sourceNodeForNewConnection, setSourceNodeForNewConnection] = useState<string | null>(null)
-
-  // Highlighted nodes and edges for search
-  const [highlightedNodeIds, setHighlightedNodeIds] = useState<string[]>([])
-  const [highlightedEdgeIds, setHighlightedEdgeIds] = useState<string[]>([])
+  const [currentSearchIndex, setCurrentSearchIndex] = useState<number>(0)
 
   // Initialize nodes and connections
   useEffect(() => {
@@ -136,15 +121,15 @@ export function WorkflowCanvas({ initialNodes = [], initialEdges = [] }: Workflo
             title: "Telegram Send Message",
             description: "Send a message to your Telegram channel",
             content: "Add a text",
-            x: 450,
+            x: 480,
             y: 100,
           },
           {
             id: "action-2",
             type: "action",
             title: "Telegram Send Message #1",
-            content: "omm",
-            x: 800,
+            content: "This is a message with more content to demonstrate auto-sizing",
+            x: 860,
             y: 100,
             isEndNode: true,
           },
@@ -187,19 +172,21 @@ export function WorkflowCanvas({ initialNodes = [], initialEdges = [] }: Workflo
         return { startX: 0, startY: 0, endX: 0, endY: 0 }
       }
 
-      const nodeWidth = sourceNode.width || 280
+      const sourceWidth = sourceNode.width || 280
+      const sourceHeight = nodeDimensions[sourceNode.id]?.height || 150
+      const targetHeight = nodeDimensions[targetNode.id]?.height || 150
 
       // Output port (right) of source node
-      const startX = sourceNode.x + nodeWidth
-      const startY = sourceNode.y + 75 // Middle of the node
+      const startX = sourceNode.x + sourceWidth
+      const startY = sourceNode.y + sourceHeight / 2
 
       // Input port (left) of target node
       const endX = targetNode.x
-      const endY = targetNode.y + 75 // Middle of the node
+      const endY = targetNode.y + targetHeight / 2
 
       return { startX, startY, endX, endY }
     },
-    [nodes],
+    [nodes, nodeDimensions],
   )
 
   // Update canvas position and scale
@@ -216,7 +203,7 @@ export function WorkflowCanvas({ initialNodes = [], initialEdges = [] }: Workflo
 
   // Close context menu on outside click
   useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
+    const handleClickOutside = () => {
       if (contextMenu.isOpen) {
         setContextMenu((prev) => ({ ...prev, isOpen: false }))
       }
@@ -228,44 +215,12 @@ export function WorkflowCanvas({ initialNodes = [], initialEdges = [] }: Workflo
     }
   }, [contextMenu.isOpen])
 
-  // Handle search
-  useEffect(() => {
-    if (searchTerm) {
-      const results = nodes
-        .filter(
-          (node) =>
-            node.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            (node.content && node.content.toLowerCase().includes(searchTerm.toLowerCase())) ||
-            (node.description && node.description.toLowerCase().includes(searchTerm.toLowerCase())),
-        )
-        .map((node) => node.id)
-
-      setSearchResults(results)
-      setHighlightedNodeIds(results)
-
-      // Highlight edges connected to these nodes
-      const connectedEdges = edges
-        .filter((edge) => results.includes(edge.sourceId) || results.includes(edge.targetId))
-        .map((edge) => edge.id)
-
-      setHighlightedEdgeIds(connectedEdges)
-
-      if (results.length > 0) {
-        setCurrentSearchIndex(0)
-      }
-    } else {
-      setSearchResults([])
-      setHighlightedNodeIds([])
-      setHighlightedEdgeIds([])
-    }
-  }, [searchTerm, nodes, edges])
-
-  const handleNodeSelect = (id: string, isDrag: boolean) => {
+  const handleNodeSelect = (id: string, isDragEvent: boolean) => {
     setSelectedNodeId(id)
     setSelectedEdgeId(null)
 
-    // Only open sidebar if it's a click, not a drag
-    if (!isDrag) {
+    // Only open sidebar for click events, not drag
+    if (!isDragEvent) {
       setSidebarOpen(true)
     }
   }
@@ -287,10 +242,20 @@ export function WorkflowCanvas({ initialNodes = [], initialEdges = [] }: Workflo
     // Remove the node
     setNodes((prev) => prev.filter((node) => node.id !== id))
 
+    // Close context menu
+    setContextMenu((prev) => ({ ...prev, isOpen: false }))
+
     if (selectedNodeId === id) {
       setSelectedNodeId(null)
       setSidebarOpen(false)
     }
+  }
+
+  const handleNodeResize = (id: string, width: number, height: number) => {
+    setNodeDimensions((prev) => ({
+      ...prev,
+      [id]: { width, height },
+    }))
   }
 
   const handleEdgeDelete = (id: string) => {
@@ -312,6 +277,17 @@ export function WorkflowCanvas({ initialNodes = [], initialEdges = [] }: Workflo
         setSelectedNodeId(null)
         setSelectedEdgeId(null)
         setSidebarOpen(false)
+        setContextMenu((prev) => ({ ...prev, isOpen: false }))
+      } else if (e.button === 2) {
+        // Right click
+        // Open context menu for canvas
+        e.preventDefault()
+        setContextMenu({
+          isOpen: true,
+          x: e.clientX,
+          y: e.clientY,
+          type: "canvas",
+        })
       }
     }
   }
@@ -336,23 +312,6 @@ export function WorkflowCanvas({ initialNodes = [], initialEdges = [] }: Workflo
         const x = (e.clientX - canvasRect.left - canvasOffset.x) / scale
         const y = (e.clientY - canvasRect.top - canvasOffset.y) / scale
         setTempConnection((prev) => (prev ? { ...prev, endX: x, endY: y } : null))
-      }
-    }
-
-    // Update reconnecting edge
-    if (isReconnecting && reconnectingEdge) {
-      const canvasRect = canvasRef.current?.getBoundingClientRect()
-      if (canvasRect) {
-        const x = (e.clientX - canvasRect.left - canvasOffset.x) / scale
-        const y = (e.clientY - canvasRect.top - canvasOffset.y) / scale
-
-        // Highlight node under cursor for potential reconnection
-        const nodeUnderCursor = findNodeAtPosition(x, y)
-        if (nodeUnderCursor && nodeUnderCursor !== reconnectingEdge.sourceId) {
-          setHighlightedNodeIds([nodeUnderCursor])
-        } else {
-          setHighlightedNodeIds([])
-        }
       }
     }
   }
@@ -392,47 +351,12 @@ export function WorkflowCanvas({ initialNodes = [], initialEdges = [] }: Workflo
 
             setEdges((prev) => [...prev, newEdge])
           }
-        } else if (!targetInfo) {
-          // If dropped on empty canvas, remember source node for potential new connection
-          setSourceNodeForNewConnection(tempConnection.sourceId)
-
-          // Open context menu for node creation
-          setContextMenu({
-            isOpen: true,
-            x: e.clientX,
-            y: e.clientY,
-            type: "canvas",
-          })
         }
       }
 
       // Reset temp connection
       setIsCreatingConnection(false)
       setTempConnection(null)
-    }
-
-    // Handle reconnection completion
-    if (isReconnecting && reconnectingEdge) {
-      const canvasRect = canvasRef.current?.getBoundingClientRect()
-      if (canvasRect) {
-        const mouseX = (e.clientX - canvasRect.left - canvasOffset.x) / scale
-        const mouseY = (e.clientY - canvasRect.top - canvasOffset.y) / scale
-
-        // Check if dropped on a node
-        const targetNodeId = findNodeAtPosition(mouseX, mouseY)
-
-        if (targetNodeId && targetNodeId !== reconnectingEdge.sourceId) {
-          // Update the edge with the new target
-          setEdges((prev) =>
-            prev.map((edge) => (edge.id === reconnectingEdge.id ? { ...edge, targetId: targetNodeId } : edge)),
-          )
-        }
-      }
-
-      // Reset reconnection state
-      setIsReconnecting(false)
-      setReconnectingEdge(null)
-      setHighlightedNodeIds([])
     }
   }
 
@@ -446,7 +370,7 @@ export function WorkflowCanvas({ initialNodes = [], initialEdges = [] }: Workflo
     })
   }
 
-  const handleAddNodeContextMenu = (type: string, x: number, y: number) => {
+  const handleAddNode = (type: string, x: number, y: number) => {
     const id = `${type}-${Date.now()}`
 
     let title = "New Node"
@@ -483,17 +407,29 @@ export function WorkflowCanvas({ initialNodes = [], initialEdges = [] }: Workflo
         description = "Wait for a specified time period"
         content = "Wait for 5 minutes"
         break
-      case "start":
-        title = "Start Automation"
-        description = "Begin the automation workflow"
-        break
     }
 
     const canvasRect = canvasRef.current?.getBoundingClientRect()
     if (!canvasRect) return
 
-    const canvasX = (x - canvasRect.left - canvasOffset.x) / scale - 140 // Center node horizontally
-    const canvasY = (y - canvasRect.top - canvasOffset.y) / scale - 75 // Position node vertically
+    // Find the rightmost node to place the new node after it
+    let rightmostX = 100
+    nodes.forEach((node) => {
+      const nodeRightEdge = node.x + (node.width || 280)
+      if (nodeRightEdge > rightmostX) {
+        rightmostX = nodeRightEdge
+      }
+    })
+
+    // Place new node to the right with 80px spacing
+    const newNodeX = rightmostX + 80
+
+    // Use the y position from the context menu if it's within the canvas,
+    // otherwise use a standard y positioning
+    const canvasY = (y - canvasRect.top - canvasOffset.y) / scale
+
+    // If there are no nodes, place at standard position, otherwise align with existing nodes
+    const newNodeY = nodes.length === 0 ? 100 : nodes[0].y
 
     const newNode: NodeData = {
       id,
@@ -501,29 +437,15 @@ export function WorkflowCanvas({ initialNodes = [], initialEdges = [] }: Workflo
       title,
       description,
       content,
-      x: canvasX,
-      y: canvasY,
-      isStartNode: type === "start",
+      x: newNodeX,
+      y: newNodeY,
+      isStartNode: type === "trigger" && nodes.length === 0,
       isEndNode: false,
     }
 
     setNodes((prev) => [...prev, newNode])
     setSelectedNodeId(id)
-
-    // If creating from connection, connect to source node
-    if (sourceNodeForNewConnection) {
-      const newEdge: Edge = {
-        id: `edge-${Date.now()}`,
-        sourceId: sourceNodeForNewConnection,
-        targetId: id,
-        sourcePort: "output",
-        targetPort: "input",
-        label: "Next",
-      }
-
-      setEdges((prev) => [...prev, newEdge])
-      setSourceNodeForNewConnection(null)
-    }
+    setSidebarOpen(true)
 
     setContextMenu((prev) => ({ ...prev, isOpen: false }))
   }
@@ -535,14 +457,15 @@ export function WorkflowCanvas({ initialNodes = [], initialEdges = [] }: Workflo
     setIsCreatingConnection(true)
 
     const nodeWidth = node.width || 280
+    const nodeHeight = nodeDimensions[nodeId]?.height || 150
     let startX, startY
 
     if (portType === "output") {
       startX = node.x + nodeWidth // Right side
-      startY = node.y + 75 // Middle
+      startY = node.y + nodeHeight / 2 // Middle height
     } else {
       startX = node.x // Left side
-      startY = node.y + 75 // Middle
+      startY = node.y + nodeHeight / 2 // Middle height
     }
 
     const canvasRect = canvasRef.current?.getBoundingClientRect()
@@ -561,43 +484,16 @@ export function WorkflowCanvas({ initialNodes = [], initialEdges = [] }: Workflo
     }
   }
 
-  const startEdgeReconnect = (edgeId: string, sourceId: string, targetId: string) => {
-    const edge = edges.find((e) => e.id === edgeId)
-    if (!edge) return
-
-    const sourceNode = nodes.find((n) => n.id === sourceId)
-    const targetNode = nodes.find((n) => n.id === targetId)
-    if (!sourceNode || !targetNode) return
-
-    setIsReconnecting(true)
-
-    const sourceWidth = sourceNode.width || 280
-    const startX = sourceNode.x + sourceWidth // Output port of source
-    const startY = sourceNode.y + 75 // Middle of node
-
-    setReconnectingEdge({
-      id: edgeId,
-      sourceId,
-      targetId,
-      sourcePort: "output",
-      targetPort: "input",
-      startX,
-      startY,
-    })
-
-    // Highlight the source node
-    setHighlightedNodeIds([sourceId])
-  }
-
   const findPortAtPosition = (x: number, y: number): { nodeId: string; portType: "input" | "output" } | null => {
     const portRadius = 15 // Increased hit area
 
     for (const node of nodes) {
       const nodeWidth = node.width || 280
+      const nodeHeight = nodeDimensions[node.id]?.height || 150
 
       // Input port (left)
       const inputPortX = node.x
-      const inputPortY = node.y + 75 // Middle
+      const inputPortY = node.y + nodeHeight / 2 // Middle height
 
       if (Math.sqrt(Math.pow(x - inputPortX, 2) + Math.pow(y - inputPortY, 2)) <= portRadius) {
         return { nodeId: node.id, portType: "input" }
@@ -605,7 +501,7 @@ export function WorkflowCanvas({ initialNodes = [], initialEdges = [] }: Workflo
 
       // Output port (right)
       const outputPortX = node.x + nodeWidth
-      const outputPortY = node.y + 75 // Middle
+      const outputPortY = node.y + nodeHeight / 2 // Middle height
 
       if (Math.sqrt(Math.pow(x - outputPortX, 2) + Math.pow(y - outputPortY, 2)) <= portRadius) {
         return { nodeId: node.id, portType: "output" }
@@ -640,17 +536,12 @@ export function WorkflowCanvas({ initialNodes = [], initialEdges = [] }: Workflo
     })
   }
 
-  const handleNodeEdit = (nodeId: string) => {
-    setSelectedNodeId(nodeId)
-    setSidebarOpen(true)
-  }
-
   const handleNodeContentChange = (nodeId: string, content: string) => {
     setNodes((prev) => prev.map((node) => (node.id === nodeId ? { ...node, content } : node)))
   }
 
   // Handle node editor save
-  const handleNodeEditorSave = (nodeId: string, updates: { title?: string; content?: string }) => {
+  const handleNodeEditorSave = (nodeId: string, updates: { title?: string; content?: string; [key: string]: any }) => {
     setNodes((prev) =>
       prev.map((node) =>
         node.id === nodeId
@@ -667,6 +558,7 @@ export function WorkflowCanvas({ initialNodes = [], initialEdges = [] }: Workflo
   // Handle node double click
   const handleNodeDoubleClick = (nodeId: string) => {
     setSelectedNodeId(nodeId)
+    setSidebarOpen(true)
   }
 
   // Handle node collapse toggle
@@ -675,52 +567,57 @@ export function WorkflowCanvas({ initialNodes = [], initialEdges = [] }: Workflo
   }
 
   // Handle node resize
-  const handleNodeResize = (nodeId: string, height: number) => {
+  const handleNodeHeightChange = (nodeId: string, height: number) => {
     setNodes((prev) => prev.map((node) => (node.id === nodeId ? { ...node, height } : node)))
   }
 
-  // Auto layout the nodes horizontally
+  // Auto layout the nodes
   const autoLayoutNodes = () => {
-    const nodeSpacing = 80 // Gap between nodes
-    const startX = 100
-    const startY = 100
+    // Simple horizontal layout from left to right
+    const startNode = nodes.find((node) => node.isStartNode) || nodes[0]
+    if (!startNode) return
 
-    // Sort nodes based on connections to determine order
+    // Start with the node that has no incoming edges (assuming it's a start node)
     const nodeOrder: string[] = []
     const visited = new Set<string>()
 
-    // Find start nodes (nodes with no incoming edges)
-    const startNodes = nodes.filter((node) => node.isStartNode || !edges.some((edge) => edge.targetId === node.id))
+    // First, collect all nodes with no incoming edges
+    const nodesWithNoIncoming = nodes
+      .filter((node) => !edges.some((edge) => edge.targetId === node.id))
+      .map((node) => node.id)
 
-    // Traverse the graph to determine node order
-    const traverse = (nodeId: string) => {
+    // DFS to determine node order
+    const dfs = (nodeId: string) => {
       if (visited.has(nodeId)) return
       visited.add(nodeId)
       nodeOrder.push(nodeId)
 
-      // Find outgoing edges
-      const outEdges = edges.filter((edge) => edge.sourceId === nodeId)
-      for (const edge of outEdges) {
-        traverse(edge.targetId)
-      }
+      // Find all outgoing edges
+      const outgoingEdges = edges.filter((edge) => edge.sourceId === nodeId)
+      outgoingEdges.forEach((edge) => {
+        dfs(edge.targetId)
+      })
     }
 
-    // Start traversal from each start node
-    for (const startNode of startNodes) {
-      traverse(startNode.id)
-    }
+    // Start from nodes with no incoming edges
+    nodesWithNoIncoming.forEach((nodeId) => {
+      dfs(nodeId)
+    })
 
-    // Add any remaining nodes that weren't connected
+    // Add any remaining nodes
     nodes.forEach((node) => {
       if (!visited.has(node.id)) {
         nodeOrder.push(node.id)
       }
     })
 
-    // Position nodes horizontally based on order
+    // Position nodes horizontally
+    const baseY = nodes[0].y // Keep the same y position
+    const spacing = 80 // 80px spacing between nodes
+
     setNodes((prev) => {
       const updatedNodes = [...prev]
-      let currentX = startX
+      let currentX = 100 // Start position
 
       nodeOrder.forEach((nodeId) => {
         const nodeIndex = updatedNodes.findIndex((n) => n.id === nodeId)
@@ -729,9 +626,9 @@ export function WorkflowCanvas({ initialNodes = [], initialEdges = [] }: Workflo
           updatedNodes[nodeIndex] = {
             ...updatedNodes[nodeIndex],
             x: currentX,
-            y: startY,
+            y: baseY,
           }
-          currentX += nodeWidth + nodeSpacing
+          currentX += nodeWidth + spacing
         }
       })
 
@@ -775,33 +672,6 @@ export function WorkflowCanvas({ initialNodes = [], initialEdges = [] }: Workflo
     }
   }
 
-  // Add a new node
-  const handleAddNodeButton = () => {
-    // Find the rightmost node to place the new one after it
-    let maxX = 100
-    nodes.forEach((node) => {
-      const nodeRight = node.x + (node.width || 280)
-      if (nodeRight > maxX) {
-        maxX = nodeRight
-      }
-    })
-
-    const id = `action-${Date.now()}`
-    const newNode: NodeData = {
-      id,
-      type: "action",
-      title: "New Action",
-      description: "Configure this action",
-      content: "Add content here",
-      x: maxX + 80, // Place it after the rightmost node with spacing
-      y: 100,
-    }
-
-    setNodes((prev) => [...prev, newNode])
-    setSelectedNodeId(id)
-    setSidebarOpen(true)
-  }
-
   // Reset zoom and position
   const resetCanvas = () => {
     setCanvasOffset({ x: 0, y: 0 })
@@ -825,9 +695,16 @@ export function WorkflowCanvas({ initialNodes = [], initialEdges = [] }: Workflo
         {/* Canvas controls */}
         <div className="absolute left-4 top-4 z-10 flex gap-2">
           <button
-            onClick={handleAddNodeButton}
+            onClick={() => {
+              setContextMenu({
+                isOpen: true,
+                x: 100,
+                y: 100,
+                type: "canvas",
+              })
+            }}
             className={cn(
-              "flex items-center gap-1 rounded-md border px-3 py-1.5 text-sm font-medium shadow-sm",
+              "flex items-center gap-1 rounded-md border px-3 py-1.5 text-sm font-medium shadow-sm transition-colors",
               isDarkMode
                 ? "border-[#2a2a2a] bg-[#1e1e1e] text-gray-300 hover:bg-[#2a2a2a]"
                 : "border-gray-300 bg-white text-gray-700 hover:bg-gray-50",
@@ -837,18 +714,30 @@ export function WorkflowCanvas({ initialNodes = [], initialEdges = [] }: Workflo
             <span>Add Node</span>
           </button>
 
-          <AutoLayoutButton onClick={autoLayoutNodes} />
+          <button
+            onClick={autoLayoutNodes}
+            className={cn(
+              "flex items-center gap-1 rounded-md border px-3 py-1.5 text-sm font-medium shadow-sm transition-colors",
+              isDarkMode
+                ? "border-[#2a2a2a] bg-[#1e1e1e] text-gray-300 hover:bg-[#2a2a2a]"
+                : "border-gray-300 bg-white text-gray-700 hover:bg-gray-50",
+            )}
+          >
+            <span>Auto Layout</span>
+          </button>
         </div>
 
         {/* Search bar */}
-        <div className="absolute left-4 top-16 z-10 w-64"></div>
+        {/* <div className="absolute left-4 top-16 z-10 w-64">
+          <SearchBar onSearch={handleSearch} onClear={handleClearSearch} onFocusNext={handleFocusNextSearchResult} />
+        </div> */}
 
         {/* Zoom controls */}
         <div className="absolute right-4 top-4 z-10 flex flex-col gap-2">
           <button
             onClick={() => setScale((prev) => Math.min(prev + 0.1, 2))}
             className={cn(
-              "flex h-8 w-8 items-center justify-center rounded-md border shadow-sm",
+              "flex h-8 w-8 items-center justify-center rounded-md border shadow-sm transition-colors",
               isDarkMode
                 ? "border-[#2a2a2a] bg-[#1e1e1e] text-gray-300 hover:bg-[#2a2a2a]"
                 : "border-gray-300 bg-white text-gray-700 hover:bg-gray-50",
@@ -859,7 +748,7 @@ export function WorkflowCanvas({ initialNodes = [], initialEdges = [] }: Workflo
           <button
             onClick={() => setScale((prev) => Math.max(prev - 0.1, 0.5))}
             className={cn(
-              "flex h-8 w-8 items-center justify-center rounded-md border shadow-sm",
+              "flex h-8 w-8 items-center justify-center rounded-md border shadow-sm transition-colors",
               isDarkMode
                 ? "border-[#2a2a2a] bg-[#1e1e1e] text-gray-300 hover:bg-[#2a2a2a]"
                 : "border-gray-300 bg-white text-gray-700 hover:bg-gray-50",
@@ -870,7 +759,7 @@ export function WorkflowCanvas({ initialNodes = [], initialEdges = [] }: Workflo
           <button
             onClick={resetCanvas}
             className={cn(
-              "flex h-8 w-8 items-center justify-center rounded-md border shadow-sm",
+              "flex h-8 w-8 items-center justify-center rounded-md border shadow-sm transition-colors",
               isDarkMode
                 ? "border-[#2a2a2a] bg-[#1e1e1e] text-gray-300 hover:bg-[#2a2a2a]"
                 : "border-gray-300 bg-white text-gray-700 hover:bg-gray-50",
@@ -909,6 +798,7 @@ export function WorkflowCanvas({ initialNodes = [], initialEdges = [] }: Workflo
                 endY={points.endY}
                 label={edge.label}
                 isSelected={selectedEdgeId === edge.id}
+                isHighlighted={highlightedEdgeIds.includes(edge.id)}
                 onClick={(id) => handleEdgeSelect(id)}
               />
             )
@@ -920,18 +810,6 @@ export function WorkflowCanvas({ initialNodes = [], initialEdges = [] }: Workflo
               d={`M${tempConnection.startX},${tempConnection.startY} C${tempConnection.startX + 100},${tempConnection.startY} ${tempConnection.endX - 100},${tempConnection.endY} ${tempConnection.endX},${tempConnection.endY}`}
               fill="none"
               stroke={isDarkMode ? "#6b7280" : "#a3aebf"}
-              strokeWidth="2"
-              strokeLinecap="round"
-              markerEnd="url(#arrowhead)"
-            />
-          )}
-
-          {/* Reconnecting edge */}
-          {isReconnecting && reconnectingEdge && (
-            <path
-              d={`M${reconnectingEdge.startX},${reconnectingEdge.startY} C${reconnectingEdge.startX + 100},${reconnectingEdge.startY} ${tempConnection?.endX || reconnectingEdge.startX + 200}-100,${tempConnection?.endY || reconnectingEdge.startY} ${tempConnection?.endX || reconnectingEdge.startX + 200},${tempConnection?.endY || reconnectingEdge.startY}`}
-              fill="none"
-              stroke={isDarkMode ? "#ec4899" : "#ec4899"}
               strokeWidth="2"
               strokeDasharray="5,5"
               markerEnd="url(#arrowhead)"
@@ -957,31 +835,108 @@ export function WorkflowCanvas({ initialNodes = [], initialEdges = [] }: Workflo
               content={node.content}
               x={node.x}
               y={node.y}
-              width={node.width}
-              isSelected={selectedNodeId === node.id || highlightedNodeIds.includes(node.id)}
+              width={node.width || 280}
+              isSelected={selectedNodeId === node.id}
               isStartNode={node.isStartNode}
               isEndNode={node.isEndNode}
+              isHighlighted={highlightedNodeIds.includes(node.id)}
               onSelect={handleNodeSelect}
               onMove={handleNodeMove}
               onDelete={handleNodeDelete}
               onStartConnection={startConnectionDrag}
-              onEdit={handleNodeEdit}
+              onContextMenu={handleNodeContextMenu}
               onContentChange={handleNodeContentChange}
+              onDoubleClick={handleNodeDoubleClick}
+              onResize={handleNodeResize}
             />
           ))}
         </div>
+
+        {/* Context Menu */}
+        {contextMenu.isOpen && (
+          <div
+            className={cn(
+              "absolute z-50 w-56 rounded-lg border shadow-lg",
+              isDarkMode ? "border-[#2a2a2a] bg-[#1e1e1e] text-white" : "border-gray-200 bg-white text-gray-900",
+            )}
+            style={{ top: contextMenu.y, left: contextMenu.x }}
+          >
+            {contextMenu.type === "canvas" && (
+              <div className="p-2">
+                <div className="mb-2 px-3 py-1 text-sm font-medium text-gray-500">Add Node</div>
+                <button
+                  className={cn(
+                    "flex w-full items-center rounded-md px-3 py-2 text-sm",
+                    isDarkMode ? "hover:bg-[#2a2a2a]" : "hover:bg-gray-100",
+                  )}
+                  onClick={() => handleAddNode("telegram", contextMenu.x, contextMenu.y)}
+                >
+                  <div className="mr-2 flex h-6 w-6 items-center justify-center rounded-full bg-blue-100 text-blue-600">
+                    <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <circle cx="12" cy="12" r="11.5" fill="#0088cc" stroke="#0088cc" />
+                      <path
+                        d="M9 8.51l3.89 3.09c.09.08.11.21.03.29 0 0-.03.04-.03.04l-3.89 3.09c-.13.1-.31 0-.31-.17V8.69c0-.18.18-.27.31-.18z"
+                        fill="#fff"
+                      />
+                    </svg>
+                  </div>
+                  <span>Telegram</span>
+                </button>
+                <button
+                  className={cn(
+                    "flex w-full items-center rounded-md px-3 py-2 text-sm",
+                    isDarkMode ? "hover:bg-[#2a2a2a]" : "hover:bg-gray-100",
+                  )}
+                  onClick={() => handleAddNode("ai", contextMenu.x, contextMenu.y)}
+                >
+                  <div className="mr-2 flex h-6 w-6 items-center justify-center rounded-full bg-purple-100 text-purple-600">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <path
+                        d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 16h2v-2h-2v2zm0-4h2V7h-2v7z"
+                        fill="currentColor"
+                      />
+                    </svg>
+                  </div>
+                  <span>AI Step</span>
+                </button>
+                <button
+                  className={cn(
+                    "flex w-full items-center rounded-md px-3 py-2 text-sm",
+                    isDarkMode ? "hover:bg-[#2a2a2a]" : "hover:bg-gray-100",
+                  )}
+                  onClick={() => handleAddNode("condition", contextMenu.x, contextMenu.y)}
+                >
+                  <div className="mr-2 flex h-6 w-6 items-center justify-center rounded-full bg-yellow-100 text-yellow-600">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <path
+                        d="M7 7l5 5 5-5M7 17l5-5 5 5"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </svg>
+                  </div>
+                  <span>Condition</span>
+                </button>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Node Sidebar */}
-      <NodeSidebar
-        nodeId={selectedNodeId}
-        nodeType={selectedNode?.type}
-        nodeTitle={selectedNode?.title}
-        nodeContent={selectedNode?.content}
-        isOpen={sidebarOpen}
-        onClose={() => setSidebarOpen(false)}
-        onSave={handleNodeEditorSave}
-      />
+      {sidebarOpen && selectedNode && (
+        <NodeSidebar
+          nodeId={selectedNodeId}
+          nodeType={selectedNode?.type}
+          nodeTitle={selectedNode?.title}
+          nodeContent={selectedNode?.content}
+          isOpen={sidebarOpen}
+          onClose={() => setSidebarOpen(false)}
+          onSave={handleNodeEditorSave}
+        />
+      )}
     </div>
   )
 }

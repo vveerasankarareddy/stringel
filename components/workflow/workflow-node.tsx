@@ -1,10 +1,9 @@
 "use client"
 
 import type React from "react"
-
 import { useState, useRef, useEffect } from "react"
 import { cn } from "@/lib/utils"
-import { Trash2, Edit } from "lucide-react"
+import { Trash2, Edit, ChevronRight } from "lucide-react"
 import { useTheme } from "next-themes"
 
 interface WorkflowNodeProps {
@@ -19,12 +18,15 @@ interface WorkflowNodeProps {
   isSelected?: boolean
   isStartNode?: boolean
   isEndNode?: boolean
-  onSelect: (id: string, isDrag: boolean) => void
+  isHighlighted?: boolean
+  onSelect: (id: string, dragEvent: boolean) => void
   onMove: (id: string, x: number, y: number) => void
   onDelete?: (id: string) => void
   onStartConnection?: (id: string, portType: "input" | "output", e: React.MouseEvent) => void
-  onEdit?: (id: string) => void
+  onContextMenu?: (e: React.MouseEvent, id: string) => void
   onContentChange?: (id: string, content: string) => void
+  onDoubleClick?: (id: string) => void
+  onResize?: (id: string, width: number, height: number) => void
 }
 
 export function WorkflowNode({
@@ -39,25 +41,28 @@ export function WorkflowNode({
   isSelected = false,
   isStartNode = false,
   isEndNode = false,
+  isHighlighted = false,
   onSelect,
   onMove,
   onDelete,
   onStartConnection,
-  onEdit,
+  onContextMenu,
   onContentChange,
+  onDoubleClick,
+  onResize,
 }: WorkflowNodeProps) {
   const { resolvedTheme } = useTheme()
   const isDarkMode = resolvedTheme === "dark"
   const [isDragging, setIsDragging] = useState(false)
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 })
   const [isEditing, setIsEditing] = useState(false)
+  const [isHoveringInput, setIsHoveringInput] = useState(false)
+  const [isHoveringOutput, setIsHoveringOutput] = useState(false)
   const contentRef = useRef<HTMLTextAreaElement>(null)
   const nodeRef = useRef<HTMLDivElement>(null)
   const [nodeHeight, setNodeHeight] = useState(0)
-  const [inputPortY, setInputPortY] = useState(0)
-  const [outputPortY, setOutputPortY] = useState(0)
-  const dragStartPosRef = useRef({ x: 0, y: 0 })
-  const hasDraggedRef = useRef(false)
+  const [isDragEvent, setIsDragEvent] = useState(false)
+  const dragStartPosition = useRef({ x: 0, y: 0 })
 
   // Measure node height and update port positions
   useEffect(() => {
@@ -67,39 +72,37 @@ export function WorkflowNode({
           const height = entry.contentRect.height
           setNodeHeight(height)
 
-          // Calculate port positions (centered vertically)
-          const portY = height / 2
-          setInputPortY(portY)
-          setOutputPortY(portY)
+          // Notify parent about size change
+          if (onResize) {
+            onResize(id, width, height)
+          }
         }
       })
 
       observer.observe(nodeRef.current)
-      return () => observer.disconnect()
+      return () => {
+        observer.disconnect()
+      }
     }
-  }, [])
+  }, [id, width, onResize])
 
   const handleMouseDown = (e: React.MouseEvent) => {
-    // Don't start drag if clicking on action buttons or ports
     if (
       e.target instanceof HTMLElement &&
       (e.target.closest(".node-action") || e.target.closest(".node-port") || e.target.closest(".node-content-edit"))
     ) {
-      return
+      return // Don't start drag if clicking on action buttons or ports
     }
 
     setIsDragging(true)
-    hasDraggedRef.current = false
-    dragStartPosRef.current = { x: e.clientX, y: e.clientY }
+    setIsDragEvent(true)
+    dragStartPosition.current = { x: e.clientX, y: e.clientY }
 
-    // Only track drag offset, don't select yet
+    onSelect(id, true) // Pass true to indicate it's a drag event
     setDragOffset({
       x: e.clientX - x,
       y: e.clientY - y,
     })
-
-    // Prevent default to avoid text selection during drag
-    e.preventDefault()
   }
 
   const handleMouseMove = (e: React.MouseEvent) => {
@@ -107,30 +110,30 @@ export function WorkflowNode({
       const newX = e.clientX - dragOffset.x
       const newY = e.clientY - dragOffset.y
       onMove(id, newX, newY)
-
-      // Check if we've moved enough to consider this a drag
-      const dx = Math.abs(e.clientX - dragStartPosRef.current.x)
-      const dy = Math.abs(e.clientY - dragStartPosRef.current.y)
-      if (dx > 3 || dy > 3) {
-        hasDraggedRef.current = true
-      }
     }
   }
 
-  const handleMouseUp = () => {
+  const handleMouseUp = (e: React.MouseEvent) => {
     if (isDragging) {
       setIsDragging(false)
 
-      // Only select if it wasn't a significant drag
-      if (!hasDraggedRef.current) {
-        onSelect(id, false)
+      // Determine if this was a click or a drag
+      const deltaX = Math.abs(e.clientX - dragStartPosition.current.x)
+      const deltaY = Math.abs(e.clientY - dragStartPosition.current.y)
+
+      // If movement was minimal, treat as a click
+      if (deltaX < 5 && deltaY < 5) {
+        onSelect(id, false) // It was a click, not a drag
       }
+
+      setTimeout(() => {
+        setIsDragEvent(false)
+      }, 10)
     }
   }
 
   const handleClick = (e: React.MouseEvent) => {
-    // Only handle click if it wasn't part of a drag
-    if (!hasDraggedRef.current) {
+    if (!isDragEvent) {
       onSelect(id, false)
     }
   }
@@ -142,21 +145,22 @@ export function WorkflowNode({
     }
   }
 
-  const handleEdit = (e: React.MouseEvent) => {
-    e.stopPropagation()
-    if (onEdit) {
-      onEdit(id)
-    }
-  }
-
   const handleConnectionStart = (e: React.MouseEvent, portType: "input" | "output") => {
     e.stopPropagation()
+    e.preventDefault()
     if (onStartConnection) {
       onStartConnection(id, portType, e)
     }
   }
 
-  const handleEditContent = () => {
+  const handleRightClick = (e: React.MouseEvent) => {
+    if (onContextMenu) {
+      onContextMenu(e, id)
+    }
+  }
+
+  const handleEditContent = (e: React.MouseEvent) => {
+    e.stopPropagation()
     setIsEditing(true)
     setTimeout(() => {
       if (contentRef.current) {
@@ -172,8 +176,16 @@ export function WorkflowNode({
     }
   }
 
+  const handleDoubleClick = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (onDoubleClick) {
+      onDoubleClick(id)
+    }
+  }
+
   // Determine border color based on node type and state
   const getBorderColor = () => {
+    if (isHighlighted) return isDarkMode ? "border-yellow-500" : "border-yellow-400"
     if (isStartNode) return isDarkMode ? "border-green-600" : "border-green-500"
     if (isEndNode) return isDarkMode ? "border-red-600" : "border-red-500"
     if (isSelected) return isDarkMode ? "border-blue-500" : "border-blue-400"
@@ -245,6 +257,18 @@ export function WorkflowNode({
             </div>
           ),
         }
+      case "delay":
+        return {
+          bgColor: isDarkMode ? "bg-orange-900/20" : "bg-orange-50",
+          icon: (
+            <div className="flex h-8 w-8 items-center justify-center rounded-md bg-orange-100 text-orange-600">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" />
+                <path d="M12 6v6l4 2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+              </svg>
+            </div>
+          ),
+        }
       default:
         return {
           bgColor: isDarkMode ? "bg-gray-800" : "bg-gray-50",
@@ -254,6 +278,8 @@ export function WorkflowNode({
   }
 
   const nodeStyle = getNodeStyle()
+  const inputPortY = nodeHeight / 2
+  const outputPortY = nodeHeight / 2
 
   return (
     <div
@@ -264,35 +290,43 @@ export function WorkflowNode({
         nodeStyle.bgColor,
         isDarkMode ? "text-white" : "text-gray-900",
         isSelected && "ring-2 ring-blue-500/30",
-        isDragging && "cursor-grabbing shadow-md",
+        isHighlighted && "ring-2 ring-yellow-500/30",
+        isDragging && "cursor-grabbing",
       )}
       style={{
         left: `${x}px`,
         top: `${y}px`,
         width: `${width}px`,
+        minHeight: "auto",
       }}
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
       onMouseLeave={handleMouseUp}
       onClick={handleClick}
+      onContextMenu={handleRightClick}
+      onDoubleClick={handleDoubleClick}
     >
-      {/* Input port (left side) */}
+      {/* Input port (left side) with hover state */}
       <div
         className={cn(
-          "node-port absolute -left-3 z-10 flex h-6 w-6 cursor-pointer items-center justify-center rounded-full border-2",
+          "node-port absolute -left-3 z-10 flex h-6 w-6 cursor-pointer items-center justify-center rounded-full border-2 transition-colors",
           isDarkMode ? "border-gray-600 bg-gray-800" : "border-gray-300 bg-white",
+          isHoveringInput ? (isDarkMode ? "bg-gray-700" : "bg-gray-100") : "",
         )}
         style={{ top: `${inputPortY}px`, transform: "translateY(-50%)" }}
         onMouseDown={(e) => handleConnectionStart(e, "input")}
+        onMouseEnter={() => setIsHoveringInput(true)}
+        onMouseLeave={() => setIsHoveringInput(false)}
+        title="Connect input"
       >
-        <div className={cn("h-2 w-2 rounded-full", isDarkMode ? "bg-gray-400" : "bg-gray-500")} />
+        {isHoveringInput && <ChevronRight className="h-3 w-3" />}
       </div>
 
       <div className="p-4">
         <div className="flex items-start gap-3">
           {nodeStyle.icon}
-          <div className="flex-1">
+          <div className="flex-1 min-w-0">
             <div className={cn("font-medium", isDarkMode ? "text-white" : "text-gray-900")}>{title}</div>
             {description && (
               <div className={cn("mt-1 text-sm", isDarkMode ? "text-gray-400" : "text-gray-500")}>{description}</div>
@@ -319,7 +353,7 @@ export function WorkflowNode({
                   />
                 ) : (
                   <div className="flex items-start">
-                    <span className="flex-1">{content}</span>
+                    <span className="flex-1 break-words whitespace-pre-wrap">{content}</span>
                     <button
                       className="node-content-edit ml-2 rounded p-1 text-gray-400 hover:text-gray-600"
                       onClick={handleEditContent}
@@ -331,47 +365,36 @@ export function WorkflowNode({
               </div>
             )}
           </div>
-          <div className="flex flex-col gap-1">
-            {onEdit && (
-              <button
-                className={cn(
-                  "node-action rounded p-1",
-                  isDarkMode
-                    ? "text-gray-400 hover:bg-[#2a2a2a] hover:text-gray-300"
-                    : "text-gray-400 hover:bg-gray-100 hover:text-gray-600",
-                )}
-                onClick={handleEdit}
-              >
-                <Edit className="h-4 w-4" />
-              </button>
-            )}
-            {onDelete && (
-              <button
-                className={cn(
-                  "node-action rounded p-1",
-                  isDarkMode
-                    ? "text-gray-400 hover:bg-[#2a2a2a] hover:text-gray-300"
-                    : "text-gray-400 hover:bg-gray-100 hover:text-gray-600",
-                )}
-                onClick={handleDelete}
-              >
-                <Trash2 className="h-4 w-4" />
-              </button>
-            )}
-          </div>
+          {onDelete && (
+            <button
+              className={cn(
+                "node-action ml-auto rounded p-1 hover:bg-opacity-80",
+                isDarkMode
+                  ? "text-gray-400 hover:bg-[#2a2a2a] hover:text-gray-300"
+                  : "text-gray-400 hover:bg-gray-100 hover:text-gray-600",
+              )}
+              onClick={handleDelete}
+            >
+              <Trash2 className="h-4 w-4" />
+            </button>
+          )}
         </div>
       </div>
 
       {/* Output port (right side) */}
       <div
         className={cn(
-          "node-port absolute -right-3 z-10 flex h-6 w-6 cursor-pointer items-center justify-center rounded-full border-2",
+          "node-port absolute -right-3 z-10 flex h-6 w-6 cursor-pointer items-center justify-center rounded-full border-2 transition-colors",
           isDarkMode ? "border-gray-600 bg-gray-800" : "border-gray-300 bg-white",
+          isHoveringOutput ? (isDarkMode ? "bg-gray-700" : "bg-gray-100") : "",
         )}
         style={{ top: `${outputPortY}px`, transform: "translateY(-50%)" }}
         onMouseDown={(e) => handleConnectionStart(e, "output")}
+        onMouseEnter={() => setIsHoveringOutput(true)}
+        onMouseLeave={() => setIsHoveringOutput(false)}
+        title="Connect output"
       >
-        <div className={cn("h-2 w-2 rounded-full", isDarkMode ? "bg-blue-400" : "bg-blue-500")} />
+        {isHoveringOutput && <ChevronRight className="h-3 w-3 rotate-180" />}
       </div>
     </div>
   )

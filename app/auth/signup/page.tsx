@@ -15,20 +15,65 @@ export default function SignupPage() {
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
-
+  
+  // Get detailed device information for better fingerprinting
   const getDeviceInfo = () => {
-    const userAgent = navigator.userAgent || "Unknown";
-    // Generate a simple device name; server can override with parsed data if needed
-    const deviceName = `Device-${Math.random().toString(36).substring(2, 8)}`; // Unique identifier
+    const userAgent = navigator.userAgent || "";
+    let deviceType = "desktop"; // Default fallback
+    let deviceName = "Browser"; // Default fallback
+    
+    // Determine device type
+    if (/Mobi|Android|iPhone|iPad|iPod/.test(userAgent)) {
+      deviceType = /iPad/.test(userAgent) ? "tablet" : "mobile";
+    } else if (/Windows/.test(userAgent)) {
+      deviceType = "desktop";
+    } else if (/Mac/.test(userAgent)) {
+      deviceType = "desktop";
+    } else if (/Linux/.test(userAgent) && !/Android/.test(userAgent)) {
+      deviceType = "desktop";
+    }
+
+    // Determine device name (browser identifier)
+    if (/Chrome/.test(userAgent) && !/Edg/.test(userAgent)) {
+      deviceName = "Chrome";
+    } else if (/Firefox/.test(userAgent)) {
+      deviceName = "Firefox";
+    } else if (/Safari/.test(userAgent) && !/Chrome/.test(userAgent)) {
+      deviceName = "Safari";
+    } else if (/Edg/.test(userAgent)) {
+      deviceName = "Edge";
+    }
+    
+    // Get additional information to make the fingerprint more unique
+    const platform = navigator.platform || "";
+    const language = navigator.language || "";
+    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "";
+    const screenResolution = `${window.screen.width}x${window.screen.height}`;
+    
+    // Generate local storage based unique ID if not exists
+    let deviceUniqueId = localStorage.getItem('device_unique_id');
+    if (!deviceUniqueId) {
+      deviceUniqueId = generateUniqueId();
+      localStorage.setItem('device_unique_id', deviceUniqueId);
+    }
     
     return {
-      deviceName,              // Custom device identifier
-      browser: userAgent,      // Full user agent string for server parsing
-      location: {
-        country: "Unknown",    // Avoid hardcoding; server defaults to "Unknown" if not provided
-      },
-      lastLogin: new Date().toISOString(), // Current time in ISO format
+      deviceType,
+      deviceName,
+      userAgent,
+      platform,
+      language,
+      timezone,
+      screenResolution,
+      deviceUniqueId
     };
+  };
+  
+  // Generate a random unique ID for first-time device identification
+  const generateUniqueId = () => {
+    const array = new Uint32Array(4);
+    window.crypto.getRandomValues(array);
+    return Array.from(array, dec => dec.toString(16).padStart(8, '0')).join('');
   };
 
   const handleSignup = async (e: FormEvent<HTMLFormElement>) => {
@@ -38,34 +83,30 @@ export default function SignupPage() {
 
     try {
       const deviceInfo = getDeviceInfo();
-      console.log("Sending deviceInfo:", deviceInfo);
-
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/auth/register`, {
+      const fullName = lastName ? `${firstName} ${lastName}` : firstName;
+      const payload = { fullName, email, password, deviceInfo };
+      console.log("Sending signup request:", payload);
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/register`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         credentials: "include",
-        body: JSON.stringify({
-          email,
-          firstName,
-          lastName,
-          password,
-          deviceInfo,
-        }),
+        body: JSON.stringify(payload),
       });
 
+      console.log("Response status:", response.status);
       const data = await response.json();
+      console.log("Response data:", data);
 
       if (response.ok) {
-        localStorage.setItem("pendingEmail", email);
-        router.push("/auth/verify-email");
+        router.push("/home");
       } else {
-        setError(data.message || "Failed to register. Please try again.");
+        setError(data.error || "Failed to register. Please try again.");
       }
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : String(err);
-      setError(`Network error: ${errorMessage}. Please try again.`);
+      console.error("Signup request failed:", err);
+      setError(`Network error: ${err instanceof Error ? err.message : "Unknown error"}. Please try again.`);
     } finally {
       setIsLoading(false);
     }

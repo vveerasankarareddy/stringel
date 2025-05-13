@@ -5,9 +5,9 @@ import { useParams, useRouter } from "next/navigation"
 import { WorkflowCanvas } from "@/components/workflow/workflow-canvas"
 import { VariablesTab } from "@/components/workflow/variables-tab"
 import { SchemasTab } from "@/components/workflow/schemas-tab"
-import { MoreVertical, Eye } from "lucide-react"
+import { Eye } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { Sidebar } from "@/components/shared/sidebar"
+import { DashboardLayout } from "@/components/layouts/dashboard-layout"
 import { useTheme } from "next-themes"
 
 export default function ChannelDashboardPage() {
@@ -16,7 +16,6 @@ export default function ChannelDashboardPage() {
   const [activeTab, setActiveTab] = useState("automation")
   const [channelName, setChannelName] = useState("")
   const [channelType, setChannelType] = useState("")
-  const [collapsed, setCollapsed] = useState(true)
   const [isPreviewOpen, setIsPreviewOpen] = useState(false)
   const { theme, resolvedTheme } = useTheme()
   const isDarkMode = resolvedTheme === "dark"
@@ -41,10 +40,6 @@ export default function ChannelDashboardPage() {
     }
   }, [params])
 
-  const handleToggleSidebar = () => {
-    setCollapsed(!collapsed)
-  }
-
   const getChannelIcon = (type: string) => {
     switch (type) {
       case "telegram":
@@ -61,10 +56,7 @@ export default function ChannelDashboardPage() {
   }
 
   return (
-    <div className={cn("flex h-screen text-gray-900", isDarkMode ? "bg-[#121212]" : "bg-white")}>
-      {/* Sidebar */}
-      <Sidebar collapsed={collapsed} onToggle={handleToggleSidebar} />
-
+    <DashboardLayout>
       {/* Main content */}
       <div className="flex flex-1 flex-col overflow-hidden">
         {/* Top header */}
@@ -75,15 +67,6 @@ export default function ChannelDashboardPage() {
           )}
         >
           <div className="flex items-center gap-3">
-            <button
-              onClick={handleToggleSidebar}
-              className={cn(
-                "rounded-md p-1.5 hover:bg-opacity-80",
-                isDarkMode ? "text-gray-300 hover:bg-[#2a2a2a]" : "text-gray-500 hover:bg-gray-100",
-              )}
-            >
-              <MoreVertical className="h-5 w-5" />
-            </button>
             {getChannelIcon(channelType)}
             <h1 className="text-lg font-medium">{channelName}</h1>
           </div>
@@ -263,6 +246,6 @@ export default function ChannelDashboardPage() {
           </div>
         </div>
       )}
-    </div>
+    </DashboardLayout>
   )
 }
